@@ -10,5 +10,5 @@
 	</include>
 	
 	<node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-file $(find drone_swarm)/urdf/drone.urdf -urdf -z 1 -model drone" />
-	<node name="drone_controller" pkg="drone_swarm" type="drone_controller.py" args="model:=drone" output="screen"/>
+	<node name="drone_controller" pkg="drone_swarm" type="drone_controller.py" args="model:=drone" output="screen"  ns="done1"/>
 </launch> 
