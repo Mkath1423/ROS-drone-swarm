@@ -22,30 +22,30 @@ def ParseArgs(args, out):
 			out[temp[0]] = temp[1]
 			
 
-#arguments = {}
-#ParseArgs(sys.argv, arguments)
+arguments = {}
+ParseArgs(sys.argv, arguments)
 
-#mandatory_keys = ['amount_of_drones']
+mandatory_keys = ['amount_of_drones']
 
 # Make sure all the nessessary keys are added
-#if(any([not i in arguments.keys() for i in mandatory_keys])):
-#	raise ValueError('Not all mandatory keys are present. Check node arguments')
+if(any([not i in arguments.keys() for i in mandatory_keys])):
+	raise ValueError('Not all mandatory keys are present. Check node arguments')
 
 
 
 ### Setup node and ros functionalities ### 
-#rospy.init_node('ground_control')
+rospy.init_node('ground_control')
 
-#rospy.wait_for_service('/gazebo/get_model_state')
-#get_model_srv = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
+rospy.wait_for_service('/gazebo/get_model_state')
+get_model_srv = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
 
 
-#set_pid_publishers = []
-#set_target_publishers = []
+set_pid_publishers = []
+set_target_publishers = []
 
-#for i in range(1, 1 + int(arguments['amount_of_drones'])):
-#	set_pid_publishers.append(rospy.Publisher(f'/drone{i}/set_pid', SetPID, queue_size=10))
-#	set_target_publishers.append(rospy.Publisher(f'/drone{i}/set_target', SetTarget, queue_size=10))
+for i in range(1, 1 + int(arguments['amount_of_drones'])):
+	set_pid_publishers.append(rospy.Publisher(f'/drone{i}/set_pid', SetPID, queue_size=10))
+	set_target_publishers.append(rospy.Publisher(f'/drone{i}/set_target', SetTarget, queue_size=10))
 
 ### Functions ###
 def GetDronePosition(model_name):
@@ -60,6 +60,9 @@ def GetDronePosition(model_name):
 def WindowSize(x, y):
     return (round(window_size[0] * x), round(window_size[1] * y))
     
+def AreAllValuesPresent(list, dict):
+	return all([not dict[value] == "" for value in list])   
+ 
 # Display a GUI window
 
 
@@ -95,7 +98,7 @@ layout = [[sg.Text("Ground Control", size = (50, 1), font=("Helvetica", 20), jus
 
 window = sg.Window("Ground Control", layout, size = window_size)
 
-#r = rospy.Rate(100)
+r = rospy.Rate(100)
 def main():
 	cont = True
 	#while (not rospy.is_shutdown()) and cont:
@@ -108,7 +111,36 @@ def main():
 		elif(event == 'drone_select'):
 			print(f'Drone Selected: {values["drone_select"][0]}')
 		
-		#r.sleep()
+		elif(event == 'send_pid_gains'):
+			if AreAllValuesPresent(['drone_select', 'p_gain', 'i_gain', 'd_gain'], values):
+			
+				data = SetPID()
+				
+				data.p = int(''.join([ i for i in values['p_gain'] if i.isdecimal()]))
+				data.i = int(''.join([ i for i in values['i_gain'] if i.isdecimal()]))
+				data.d = int(''.join([ i for i in values['d_gain'] if i.isdecimal()]))
+				
+				set_pid_publishers[int(values['drone_select'][0][-1]) - 1].publish(data)
+			else:	
+				print('Ground Control: send_PID failed, not all values are present')	
+				
+		elif(event == 'send_target_pos'):
+			if AreAllValuesPresent(['drone_select', 'x_target', 'y_target', 'z_target'], values):
+			
+				data = SetTarget()
+				
+				data.x_pos = int(''.join([i for i in values['x_target'] if i.isdecimal()]))
+				data.y_pos = int(''.join([i for i in values['y_target'] if i.isdecimal()]))
+				data.z_pos = int(''.join([i for i in values['z_target'] if i.isdecimal()]))
+				
+				data.x_ang = 0
+				data.y_ang = 0
+				data.z_ang = 0
+				
+				set_target_publishers[int(values['drone_select'][0][-1]) - 1].publish(data)
+			else:	
+				print('Ground Control: send_PID failed, not all values are present')
+		r.sleep()
 		
 	window.close()
 

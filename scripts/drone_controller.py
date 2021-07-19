@@ -73,7 +73,7 @@ get_model_srv = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
 model = GetModelStateRequest()
 model.model_name = arguments['model']
 
-set_pid_service = rospy.Subscriber('set_pid', SetPID, set_pid)
+set_pid_sub = rospy.Subscriber('set_pid', SetPID, set_pid)
 set_target_sub = rospy.Subscriber('set_target', SetTarget, set_target)
 
 
@@ -113,6 +113,10 @@ while not rospy.is_shutdown():
 	
 	# pose
 	new_state.pose = current_state.pose
+	new_state.pose.orientation.x = 0
+	new_state.pose.orientation.y = 0
+	new_state.pose.orientation.z = 0
+	new_state.pose.orientation.w = 0
 	
 	#rot_matricx = quaternion_rotation_matrix([current_state.pose.orientation.w,
 	#					   current_state.pose.orientation.x,
