@@ -13,7 +13,7 @@
   <gazebo reference="hokuyo_link">
     <sensor name="head_hokuyo_sensor" type="gpu_ray">
       <pose>0 0 0 0 0 0</pose>
-      <visualize>false</visualize>
+      <visualize>true</visualize>
       <update_rate>40</update_rate>
       <ray>
         <scan>
@@ -40,7 +40,7 @@
         </noise>
       </ray>
       <plugin filename="libgazebo_ros_gpu_laser.so" name="gazebo_ros_head_hokuyo_controller">
-        <topicName>/rrbot/laser/scan</topicName>
+        <topicName>laser</topicName>
         <frameName>hokuyo_link</frameName>
       </plugin>
     </sensor>
@@ -72,7 +72,7 @@
       <plugin filename="libgazebo_ros_camera.so" name="camera_controller">
         <alwaysOn>true</alwaysOn>
         <updateRate>0.0</updateRate>
-        <cameraName>rrbot/camera1</cameraName>
+        <cameraName>camera</cameraName>
         <imageTopicName>image_raw</imageTopicName>
         <cameraInfoTopicName>camera_info</cameraInfoTopicName>
         <frameName>camera_link_optical</frameName>
@@ -201,4 +201,3 @@
     </inertial>
   </link>
 </robot>
-

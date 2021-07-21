@@ -54,7 +54,17 @@ def ParseArgs(args, out):
 # Parse arguments into a dict
 arguments = {}
 mandatory_keys = ['model']
+print(sys.argv)
 ParseArgs(sys.argv, arguments)
+
+if 'target_pos' in arguments:
+	temp = arguments['target_pos'].split(',')
+	temp = [int(i) for i in temp]
+	
+	target_state[0] = temp[0]
+	target_state[1] = temp[1]
+	target_state[2] = temp[2]
+	
 
 # Make sure all the nessessary keys are added
 if(any([not i in arguments.keys() for i in mandatory_keys])):
@@ -64,7 +74,7 @@ rospy.init_node(f"drone_{arguments['model']}")
 print(f'drone controller for model {arguments["model"]} has started')
 
 # Publisher Setup
-state_pub = rospy.Publisher('/gazebo/set_model_state', ModelState)
+state_pub = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=10)
 
 # Service setup
 rospy.wait_for_service('/gazebo/get_model_state')
@@ -116,27 +126,14 @@ while not rospy.is_shutdown():
 	new_state.pose.orientation.x = 0
 	new_state.pose.orientation.y = 0
 	new_state.pose.orientation.z = 0
-	new_state.pose.orientation.w = 0
-	
-	#rot_matricx = quaternion_rotation_matrix([current_state.pose.orientation.w,
-	#					   current_state.pose.orientation.x,
-	#					   current_state.pose.orientation.y,
-	#					   current_state.pose.orientation.z])
-						   
-	#print(f'{current_state.pose.orientation} -> {rot_matricx}')
-	
-	#acceleration = np.array([PID(current_error[0], last_error[0], total_error[0], 10),
-	#			 PID(current_error[1], last_error[1], total_error[1], 10),
-	#			 PID(current_error[2], last_error[2], total_error[2], 10)])
-	#
-	#acceleration = np.dot(rot_matricx, acceleration)
+	new_state.pose.orientation.w = 1
 	
 	# twist
 	new_state.twist.linear.x += PID(current_error[0], last_error[0], total_error[0], 10)
 	new_state.twist.linear.y += PID(current_error[1], last_error[1], total_error[1], 10)
 	new_state.twist.linear.z += PID(current_error[2], last_error[2], total_error[2], 10)
-	# new_state.twist.angular.x += PID(current_error[3], last_error[3], total_error[3], 0.1)
-	# new_state.twist.angular.y += PID(current_error[4], last_error[4], total_error[4], 0.1)
+	#new_state.twist.angular.x += PID(current_error[3], last_error[3], total_error[3], 0.1)
+	#new_state.twist.angular.y += PID(current_error[4], last_error[4], total_error[4], 0.1)
 	#new_state.twist.angular.z += PID(current_error[5], last_error[5], total_error[5], 0.1)
 	
 	state_pub.publish(new_state)
