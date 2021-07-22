@@ -13,6 +13,6 @@ def ParseArgs(args, out):
 
 ParseArgs(sys.argv, arguments)
 
-
+print(sys.argv)
 print("Argument List:", str(arguments))
 
