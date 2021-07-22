@@ -1,3 +1,3 @@
-int64 p
-int64 i
-int64 d
+float64 p
+float64 i
+float64 d

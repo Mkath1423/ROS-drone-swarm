@@ -10,6 +10,9 @@
 	</include>
 	
 	<param name="robot_description" textfile="$(find drone_swarm)/urdf/drone.urdf" />
+	<param name="default_movement_state" value="maual" />
+	<param name="amount_of_drones" value="2" />
+	<param name="leader_drone" value="drone1" />
 	
 	<group ns="drone1">
 		<param name="tf_prefix" value="drone1_tf" />
@@ -34,7 +37,7 @@
 	</group>
 	
 	
-	<node name="ground_control" pkg="drone_swarm" type="ground_control.py" args="amount_of_drones:=2"/>
+	<node name="ground_control" pkg="drone_swarm" type="ground_control.py" args="amount_of_drones:=2" output="screen"/>
 	
-	<node name="rviz" pkg="rviz" type="rviz"/>
+	<!-- node name="rviz" pkg="rviz" type="rviz"/ -->
 </launch> 
