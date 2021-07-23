@@ -54,12 +54,27 @@ def ParseArgs(args, out):
 # Parse arguments into a dict
 arguments = {}
 mandatory_keys = ['model']
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 ParseArgs(sys.argv, arguments)
 
 # Make sure all the nessessary keys are added
 if(any([not i in arguments.keys() for i in mandatory_keys])):
 	raise ValueError('Not all mandatory keys are present. Check node arguments')
 
+<<<<<<< Updated upstream
+=======
+
+amount_of_drones = int(rospy.get_param('/amount_of_drones', "0"))
+
+leader_drone = rospy.get_param('/leader_drone', "")
+
+#--------------------------------------------------------------------------------------------------------------------#
+#                                             Node Setup                                                             #
+#--------------------------------------------------------------------------------------------------------------------#
+>>>>>>> Stashed changes
 rospy.init_node(f"drone_{arguments['model']}")
 print(f'drone controller for model {arguments["model"]} has started')
 
@@ -87,6 +102,23 @@ while not rospy.is_shutdown():
 	
 	current_state = get_model_srv(model)
 	
+<<<<<<< Updated upstream
+=======
+	print(f"{P_GAIN} {I_GAIN} {D_GAIN}")
+
+set_pid_sub = rospy.Subscriber('set_pid', SetPID, set_pid)
+
+
+
+last_error =  [0, 0, 0, 0, 0, 0]
+total_error = [0, 0, 0, 0, 0, 0]
+target_state = [0, 0, 10, 0, 0, 0]
+
+def MoveToTargetState(current_state, target_state):
+	global last_error
+	global total_error
+	
+>>>>>>> Stashed changes
 	current_rotation = tf.transformations.euler_from_quaternion([current_state.pose.orientation.w,
 						      current_state.pose.orientation.x,
 						      current_state.pose.orientation.y,
@@ -141,5 +173,56 @@ while not rospy.is_shutdown():
 	
 	state_pub.publish(new_state)
 
+<<<<<<< Updated upstream
 	r.sleep()
+=======
+			P_GAIN = float(command[1])
+			I_GAIN = float(command[2])
+			D_GAIN = float(command[3])
+			
+			
+		
+		elif(command[0] == 'set_target'):
+			if(len(command) != 7): raise ValueError("command 'set_target' expects 6 arguments (x, y, z, r, p y)")
+			
+			global target_state
+			
+			target_state = [float(command[1]),
+					float(command[2]),
+					float(command[3]),
+					float(command[4]),
+					float(command[5]),
+					float(command[6])
+					]
+					
+
+		elif(command[0] == 'set_movement_state'):
+			if(len(command) != 2): raise ValueError("command 'set_movement_state' expects 1 arguments (new_movement_state)")
+			
+			global movement_state
+			movement_state = command[1]
+			
+		elif(command[0] == 'query'):
+			if(len(command) != 2): raise ValueError("command 'query' expects 1 arguments (value)")
+			
+			if(command[1] == 'pid_gains'):
+				return CommandResponse(True, f"{P_GAIN} {I_GAIN} {D_GAIN}")
+			
+			elif(command[1] == 'target_pos'):
+				print(f"True target state: {target_state[0]} {target_state[1]} {target_state[2]}")
+				return CommandResponse(True, f"{target_state[0]} {target_state[1]} {target_state[2]}")
+				
+			elif(command[1] == 'movement_state'):
+				return CommandResponse(True, movement_state)
+				
+
+			
+		else:
+			return CommandResponse(False, f"COMMAND FAILED: no command found '{command[0]}'")
+
+		return CommandResponse(True, "COMMAND SUCCESFUL")
+		
+	except ValueError as e:
+		return CommandResponse(False, f"COMMAND FAILED: {e}.")
+>>>>>>> Stashed changes
 	
