@@ -91,6 +91,8 @@ def ScaleVector(vector, newLength):
 	length = math.sqrt(sum([i**2 for i in vector]))
 	if length == 0: return [0 for i in vector]
 	return [newLength*i/length for i in vector]
+	
+
 
 #--------------------------------------------------------------------------------------------------------------------#
 #                                             PID controls Setup                                                     #
@@ -193,18 +195,19 @@ path = [[0, 0, 15], [5, 4, 16], [10, 9, 20]]
 
 unit_vectors = []
 unit_vectors_calculated = False
-
+samples = 0
 
 def OnBoidStart(data):
 	global unit_vectors_calculated
 	global unit_vectors
+	global samples
 	
 	print([data.angle_min + (data.angle_increment * i) for i in range(len(data.ranges))])
 	for theta in [data.angle_min + (data.angle_increment * i) for i in range(len(data.ranges))]:
 		unit_vectors.append([math.cos(theta), math.sin(theta)])
 		print(unit_vectors[-1])
 	
-	
+	samples = len(unit_vectors)
 	unit_vectors_calculated = True
 
 laser_data = LaserScan() 
@@ -225,32 +228,15 @@ laser_sub = rospy.Subscriber('laser', LaserScan, handle_laser)
 def AvoidObstacles(target_vector):
 	global unit_vectors
 	
-	clear_casts = []
-	
+	obstacles = []
+	print(samples)
 	start = None
 	for i, distance in enumerate(laser_data.ranges):
 		if not math.isinf(distance):
-			if(start == None): 
-				start = i
-				print(f'start: {i}')
-			else: 
-				clear_casts.append([i for i in range(start+1, i)])
-				print(f'end:{i}')
-				start = None
+			for j in range(i-30, i+31):
+				obstacles.append(j % samples)
 			
-	else:
-		if(not start == None):
-			clear_casts.append([i for i in range(start+1, i+1)])
-			print(f'end:{i}')
-			
-		
-				
-			
-	possible_paths = []		
-	for group in clear_casts:
-		if(len(group) > 12): 
-			for path in group[6:-6]:
-				possible_paths.append(path)
+	possible_paths = [i for i in range(0, samples) if i not in obstacles]		
 	
 	#print(f'possible_paths: {len(possible_paths)}')
 	
@@ -270,10 +256,12 @@ def AvoidObstacles(target_vector):
 				closest_unit_vector = unit_vectors[path]
 				closest_difference = difference
 				
-	print(f'return: {closest_unit_vector} target_vector: {target_vector}')		
+	#print(f'return: {closest_unit_vector} target_vector: {target_vector}')		
 	return closest_unit_vector
 
 def CalculateBoidVector(current_state, target_state):
+	
+	
 	total_vector = [0.0, 0.0, 0.0]
 	total_weight = 0
 	
@@ -290,10 +278,21 @@ def CalculateBoidVector(current_state, target_state):
 	
 	total_weight += 2
 
+	# Coherance
+	
+	
 	
 	final_direction = AvoidObstacles(ScaleVector([component/total_weight for component in total_vector], 1)) 
-	print(final_direction)
-	return [final_direction[0] * 10, final_direction[1] * 10, (total_vector[2]/total_weight) * 10]
+	
+	
+	scale = math.dist([target_state[0], 
+			   target_state[1], 
+		     	   target_state[2]], 
+			  [current_state.pose.position.x,
+			   current_state.pose.position.y, 
+			   current_state.pose.position.z])
+			   
+	return [final_direction[0] * scale, final_direction[1] * scale, (total_vector[2]/total_weight) * scale]
 	
 #--------------------------------------------------------------------------------------------------------------------#	
 #                                             Main Loop                                                              #
@@ -361,9 +360,9 @@ def main():
 			new_state.pose.orientation.z = 0
 			new_state.pose.orientation.w = 1
 			
-			new_state.twist.linear.x = velocity[0]
-			new_state.twist.linear.y = velocity[1]
-			new_state.twist.linear.z = velocity[2]
+			new_state.twist.linear.x += velocity[0]
+			new_state.twist.linear.y += velocity[1]
+			new_state.twist.linear.z += velocity[2]
 			
 			state_pub.publish(new_state)
 		
