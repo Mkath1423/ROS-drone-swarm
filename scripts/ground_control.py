@@ -169,9 +169,9 @@ def UpdateDroneInfo(drone_name):
 	window.Element("drone_position_info").update(value=drone_position_info(drone_pos[0], drone_pos[1], drone_pos[2]))
 	
 	target_pos = SendCommand(drone_name, 'query target_pos').split()
-	print(type(target_pos))
-	print(f'recived target State: {target_pos[0]} {target_pos[1]}, {target_pos[2]}')
-	print(f'after tryfloat: {TryFloat(target_pos[0])} {TryFloat(target_pos[1])} {TryFloat(target_pos[2])}')
+	# print(type(target_pos))
+	# print(f'recived target State: {target_pos[0]} {target_pos[1]}, {target_pos[2]}')
+	# print(f'after tryfloat: {TryFloat(target_pos[0])} {TryFloat(target_pos[1])} {TryFloat(target_pos[2])}')
 	window.Element("drone_target_info").update(value=drone_target_info(TryFloat(target_pos[0]), TryFloat(target_pos[1]), TryFloat(target_pos[2])))
 	window.Element("x_target").update(value=TryFloat(target_pos[0]))
 	window.Element("y_target").update(value=TryFloat(target_pos[1]))
