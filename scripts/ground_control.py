@@ -9,6 +9,8 @@ from gazebo_msgs.srv import GetModelState, GetModelStateRequest
 from drone_swarm.srv import *
 from drone_swarm.msg import *
 
+
+
 ### Globals ###
 
 window_size = (1000, 500)
@@ -228,7 +230,7 @@ def main():
 		elif(event == 'send_target_pos'):
 			if AreAllValuesPresent(['y_target', 'x_target', 'z_target'], values):
 				print(values["x_target"])
-				SendCommand(selected_drone, f'set_target {values["x_target"]} {values["y_target"]} {values["z_target"]} 0 0 0')
+				SendCommand(selected_drone, f'set_target {values["x_target"]} {values["y_target"]} {values["z_target"]}')
 				
 		
 			else:	
