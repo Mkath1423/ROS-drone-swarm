@@ -249,7 +249,7 @@ def AvoidObstacles(target_vector):
 			for j in range(i-30, i+31):
 				obstacles.append(j % samples)
 	
-	obstacles = list(dict.fromkeys(mylist))
+	obstacles = list(dict.fromkeys(obstacles))
 	
 	# determine all non obstructed directions
 	# store their incices
@@ -292,14 +292,15 @@ def AvoidObstacles(target_vector):
 				closest_obstacle_difference = difference
 				obstacle_index = i
 	
-	length = 10 / laser_data.ranges[obstacle_index]
+	if(not laser_data.ranges[obstacle_index] == float('inf')):
+		length = 10 / laser_data.ranges[obstacle_index]
 	
 	# store the new direction
 	out = []	
-	if(closest_unit_vector == None): 
+	if(closest_path_unit_vector == None): 
 		 out = target_direction 
 	else:
-		out = closest_unit_vector + target_direction[2:]
+		out = closest_path_unit_vector + target_direction[2:]
 		out = ScaleVector(out, 1)
 	
 	# Scale the vector to the original magnitude
