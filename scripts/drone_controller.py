@@ -20,6 +20,27 @@ def set_movement_state(req):
 	movement_state = req.movement_state
 	return std_msgs.Empty()
 
+
+#--------------------------------------------------------------------------------------------------------------------#
+#                                                Vector Math                                                         #
+#--------------------------------------------------------------------------------------------------------------------#
+
+def VectorLength(vector):
+	return math.sqrt(sum([i**2 for i in vector]))
+
+def ScaleVector(vector, newLength):
+	length = VectorLength(vector)
+	if length == 0: return [0 for i in vector]
+	return [newLength*i/length for i in vector]
+	
+def ClampVector(vector, max_magnitude):
+	length = VectorLength(vector)
+	
+	if length > max_magnitude:
+		return [max_magnitude*i/length for i in vector]
+	else:
+		return vector
+		
 #--------------------------------------------------------------------------------------------------------------------#
 #                                             Parse Arguments                                                        #
 #--------------------------------------------------------------------------------------------------------------------#
@@ -61,6 +82,27 @@ model.model_name = arguments['model']
 # to set the state of the gazebo model
 state_pub = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=10)
 
+def PublishAcceleration(accel, current_state):
+	new_state = ModelState()
+
+	new_state.model_name = arguments['model']
+	new_state.reference_frame = 'world'
+		
+	new_state.pose = current_state.pose
+	new_state.pose.orientation.x = 0
+	new_state.pose.orientation.y = 0
+	new_state.pose.orientation.z = 0
+	new_state.pose.orientation.w = 1
+		
+	velocity = ClampVector([current_state.twist.linear.x + accel[0], 
+				 current_state.twist.linear.y + accel[1],
+				 current_state.twist.linear.z + accel[2]], 10)
+	
+	new_state.twist.linear.x = velocity[0]
+	new_state.twist.linear.y = velocity[1]
+	new_state.twist.linear.z = velocity[2]
+		
+	state_pub.publish(new_state)
 # to publish the current position of this drone
 position_pub = rospy.Publisher('position', DronePosition, queue_size=10)
 
@@ -68,8 +110,9 @@ position_pub = rospy.Publisher('position', DronePosition, queue_size=10)
 drone_positions = {}
 def set_drone_position(data):
 	global drone_positions
-	drone_positions[data.drone_name] = [data.x, data.y, data.z]
 
+	drone_positions[data.drone_name] = [float(data.x), float(data.y), float(data.z)]
+	
 drone_position_sub =  []
 for i in range(1, amount_of_drones + 1):
 	if(str(i) == arguments['model'][-1]): continue
@@ -83,22 +126,8 @@ def set_target(data):
 	print(target_state)
 
 set_target_sub = rospy.Subscriber('set_target', SetTarget, set_target)
-#--------------------------------------------------------------------------------------------------------------------#
-#                                                Vector Math                                                         #
-#--------------------------------------------------------------------------------------------------------------------#
 
-def ScaleVector(vector, newLength):
-	length = math.sqrt(sum([i**2 for i in vector]))
-	if length == 0: return [0 for i in vector]
-	return [newLength*i/length for i in vector]
-	
-def ClampVector(vector, max_magnitude):
-	length = math.sqrt(sum([i**2 for i in vector]))
-	
-	if length > max_magnitude:
-		return [max_magnitude*i/length for i in vector]
-	else:
-		return vector
+
 
 #--------------------------------------------------------------------------------------------------------------------#
 #                                             PID controls Setup                                                     #
@@ -107,8 +136,22 @@ P_GAIN = 5
 I_GAIN = 0
 D_GAIN = 5
  
-PID = lambda e, el, et : P_GAIN * e + I_GAIN * et + D_GAIN * (e - el)
-PD = lambda e, el: P_GAIN * e + D_GAIN * (e - el)
+def set_pid(data):
+	global P_GAIN
+	global I_GAIN
+	global D_GAIN
+
+	P_GAIN = data.p
+	I_GAIN = data.i
+	D_GAIN = data.d
+	
+	print(f"{P_GAIN} {I_GAIN} {D_GAIN}")
+
+set_pid_sub = rospy.Subscriber('set_pid', SetPID, set_pid)
+ 
+ 
+# PID = lambda e, el, et : P_GAIN * e + I_GAIN * et + D_GAIN * (e - el)
+# PD = lambda e, el: P_GAIN * e + D_GAIN * (e - el)
 
 class PIDController():
 	def __init__(self, axes, P_GAIN=5, I_GAIN=0, D_GAIN=5):
@@ -128,137 +171,39 @@ class PIDController():
 		if(not len(current_state) == self.axes): 
 			raise ValueError('PID Update Failed: not enough axes')
 		
-		#if(arguments['model'] == 'drone2'):
-		#	print(f'target: {target_state}')
-		
+		# calculate current error
 		e = [target_state[i] - current_state[i] for i in range(self.axes)]
 		
+		# calcualte the total error
 		for i in range(self.axes):
 			self.et[i] += e[i] 
 		
-		
+		# calculate the output vector using PID function
 		out = [P_GAIN * e[i] + I_GAIN * self.et[i] + D_GAIN * (e[i] - self.el[i]) for i in range(self.axes)]
 		
+		# update the last error
 		self.el = e
 		
 		return out
  
-def set_pid(data):
-	global P_GAIN
-	global I_GAIN
-	global D_GAIN
 
-	P_GAIN = data.p
-	I_GAIN = data.i
-	D_GAIN = data.d
-	
-	print(f"{P_GAIN} {I_GAIN} {D_GAIN}")
-
-set_pid_sub = rospy.Subscriber('set_pid', SetPID, set_pid)
 
 target_state = [0, 0, 10]
 
-def PublishAcceleration(accel, current_state):
-	new_state = ModelState()
-
-	new_state.model_name = arguments['model']
-	new_state.reference_frame = 'world'
-		
-	new_state.pose = current_state.pose
-	new_state.pose.orientation.x = 0
-	new_state.pose.orientation.y = 0
-	new_state.pose.orientation.z = 0
-	new_state.pose.orientation.w = 1
-		
-	new_state.twist.linear.x += accel[0]
-	new_state.twist.linear.y += accel[1]
-	new_state.twist.linear.z += accel[2]
-		
-	state_pub.publish(new_state)
-
-
-#last_error =  [0, 0, 0, 0, 0, 0]
-#total_error = [0, 0, 0, 0, 0, 0]
-
-#def ClampAcceleration(accel, max_acceleration):
-#	length = math.sqrt(accel[0]**2 + accel[1]**2 + accel[2]**2)
-#	
-#	if abs(length) > max_acceleration:
-#		
-#		return [max_acceleration*accel[0]/length, max_acceleration*accel[1]/length, max_acceleration*accel[2]/length]
-#	else:
-#		return accel
-
-
-#def MoveToTargetState(current_state, target_state):
-#	global last_error
-#	global total_error
-	
-#	current_rotation = tf.transformations.euler_from_quaternion([current_state.pose.orientation.w,
-#						      current_state.pose.orientation.x,
-#						      current_state.pose.orientation.y,
-#						      current_state.pose.orientation.z])
-	
-#	current_pose = [current_state.pose.position.x,
-#			current_state.pose.position.y,
-#			current_state.pose.position.z,
-#			current_rotation[0],
-#			current_rotation[1],
-#			current_rotation[2]]
-	
-	# calculate error
-#	current_error = [target_state[i] - current_pose[i] for i in range(6)]
-		
-#	for i in range(6):
-#		total_error[i] += current_error[i]
-	
-	# apply accelerations
-#	new_state = ModelState()
-
-#	new_state.model_name = arguments['model']
-#	new_state.reference_frame = 'world'
-	
-	# pose
-#	new_state.pose = current_state.pose
-#	new_state.pose.orientation.x = 0
-#	new_state.pose.orientation.y = 0
-#	new_state.pose.orientation.z = 0
-#	new_state.pose.orientation.w = 1
-	
-	# twist
-#	accel = [PID(current_error[0], last_error[0], total_error[0]),
-#		 PID(current_error[1], last_error[1], total_error[1]),
-#		 PID(current_error[2], last_error[2], total_error[2])]
-		 
-#	accel = ClampAcceleration(accel, 10)
-	
-#	new_state.twist.linear.x += accel[0]
-#	new_state.twist.linear.y += accel[1]
-#	new_state.twist.linear.z += accel[2]
-	#new_state.twist.angular.x += PID(current_error[3], last_error[3], total_error[3], 0.1)
-	#new_state.twist.angular.y += PID(current_error[4], last_error[4], total_error[4], 0.1)
-	#new_state.twist.angular.z += PID(current_error[5], last_error[5], total_error[5], 0.1)
-	
-#	last_error = current_error.copy()
-	
-#	return new_state
 #--------------------------------------------------------------------------------------------------------------------#	
 #                                              Pathing                                                               #
 #--------------------------------------------------------------------------------------------------------------------#
 
 path = [[0, 0, 15], [5, 4, 16], [10, 9, 20]]
-
-#--------------------------------------------------------------------------------------------------------------------#	
-#                                             PID Controls                                                           #
-#--------------------------------------------------------------------------------------------------------------------#
-
-
 #--------------------------------------------------------------------------------------------------------------------#	
 #                                          Obstacle Avoidance                                                        #
 #--------------------------------------------------------------------------------------------------------------------#
 
+# The unirt vectors of each laser cast
 unit_vectors = []
 unit_vectors_calculated = False
+
+# Number of laser casts
 samples = 0
 
 def OnLaserStart(data):
@@ -266,7 +211,7 @@ def OnLaserStart(data):
 	global unit_vectors
 	global samples
 	
-	#print([data.angle_min + (data.angle_increment * i) for i in range(len(data.ranges))])
+	# Calculate the unit vectors for each of the laser casts
 	for theta in [data.angle_min + (data.angle_increment * i) for i in range(len(data.ranges))]:
 		unit_vectors.append([math.cos(theta), math.sin(theta)])
 		#print(unit_vectors[-1])
@@ -286,12 +231,16 @@ def handle_laser(data):
 	
 laser_sub = rospy.Subscriber('laser', LaserScan, handle_laser)
 
-
-
-
 def AvoidObstacles(target_vector):
 	global unit_vectors
 	
+	# store the length and direction of the target vector
+	length = VectorLength(target_vector)
+	target_direction = ScaleVector(target_vector, 1)
+	
+	
+	# determine all the obstructed directions
+	# store their indcies
 	obstacles = []
 	
 	start = None
@@ -299,70 +248,119 @@ def AvoidObstacles(target_vector):
 		if not math.isinf(distance):
 			for j in range(i-30, i+31):
 				obstacles.append(j % samples)
-			
+	
+	obstacles = list(dict.fromkeys(mylist))
+	
+	# determine all non obstructed directions
+	# store their incices
 	possible_paths = [i for i in range(0, samples) if i not in obstacles]		
 	
-	#print(f'possible_paths: {len(possible_paths)}')
 	
-	closest_unit_vector = None
+	# find the closes unobstructed direction to the target direction
+	closest_path_unit_vector = None
 	
-	closest_difference = float('inf')
+	closest_path_difference = float('inf')
 		
 	for path in possible_paths:	
-		if closest_unit_vector == None:
-			closest_unit_vector = unit_vectors[path]
-			
+		if closest_path_unit_vector == None:
+			closest_path_unit_vector = unit_vectors[path]
+			closest_path_difference = math.acos(max(min(unit_vectors[path][0]*target_direction[0] + unit_vectors[path][1]*target_direction[1], 1), -1))
 		else:
-			difference = math.acos(unit_vectors[path][0]*target_vector[0] + unit_vectors[path][1]*target_vector[1])
+			difference = math.acos(max(min(unit_vectors[path][0]*target_direction[0] + unit_vectors[path][1]*target_direction[1], 1), -1))
 			
-			if(difference < closest_difference):
+			if(difference < closest_path_difference):
+				closest_path_unit_vector = unit_vectors[path]
+				closest_path_difference = difference
 				
-				closest_unit_vector = unit_vectors[path]
-				closest_difference = difference
-				
-	#print(f'return: {closest_unit_vector} target_vector: {target_vector}')	
+	closest_obstacle_unit_vector = None
+	
+	closest_obstacle_difference = float('inf')
+	
+	obstacle_index = 0
+	
+	for i, obstacle in enumerate(obstacles):
+	
+		if closest_obstacle_unit_vector == None:
+			closest_obstacle_unit_vector = unit_vectors[obstacle]
+			closest_obstacle_difference = math.acos(max(min(unit_vectors[obstacle][0]*target_direction[0] + unit_vectors[obstacle][1]*target_direction[1], 1), -1))
+			obstacle_index = i
+		else:
+			difference = math.acos(max(min(unit_vectors[obstacle][0]*target_direction[0] + unit_vectors[obstacle][1]*target_direction[1], 1), -1))
+			
+			if(difference < closest_obstacle_difference):
+				closest_obstacle_difference = unit_vectors[path]
+				closest_obstacle_difference = difference
+				obstacle_index = i
+	
+	length = 10 / laser_data.ranges[obstacle_index]
+	
+	# store the new direction
+	out = []	
 	if(closest_unit_vector == None): 
-		 return target_vector
-	return closest_unit_vector + target_vector[2:]
+		 out = target_direction 
+	else:
+		out = closest_unit_vector + target_direction[2:]
+		out = ScaleVector(out, 1)
+	
+	# Scale the vector to the original magnitude
+	return [i * length for i in out]
 
 #--------------------------------------------------------------------------------------------------------------------#	
 #                                          Boids Algorithm                                                           #
 #--------------------------------------------------------------------------------------------------------------------#
 
-def CalculateBoidVector(current_state, target_state):
-	
+def CalculateBoidVector(current_state, target_state, attraction_gain=5, seperation_gain=6, cohesion_gain=1):
+	current_position = [current_state.pose.position.x, 
+			    current_state.pose.position.y, 
+			    current_state.pose.position.z]
 	
 	total_vector = [0.0, 0.0, 0.0]
 	total_weight = 0
 	
+	def add_to_total(vector, weight):
+		total_vector[0] += vector[0] * weight
+		total_vector[1] += vector[1] * weight
+		total_vector[2] += vector[2] * weight
+	
+		nonlocal total_weight
+		total_weight += weight
+	
 	
 	# Attraction
-	attraction_vector = ScaleVector([target_state[0]-current_state.pose.position.x,
-			    	         target_state[1]-current_state.pose.position.y,
-			                 target_state[2]-current_state.pose.position.z], 1)
+	attraction_vector = ScaleVector([target_state[0]-current_position[0],
+			    	         target_state[1]-current_position[1],
+			                 target_state[2]-current_position[2]], 1)
 		           	            
 	
-	total_vector[0] += attraction_vector[0] * 2
-	total_vector[1] += attraction_vector[1] * 2
-	total_vector[2] += attraction_vector[2] * 2
-	
-	total_weight += 2
+	add_to_total(attraction_vector, attraction_gain)
 
-	# Coherance
+	average_position = [0, 0, 0]
+	amount_of_drones = 0
+	
+	for drone in drone_positions.values():
+		
+		average_position[0] += drone[0]
+		average_position[1] += drone[1]
+		average_position[2] += drone[2]
+		
+		if math.dist(drone, current_position) < 2:
+			add_to_total(ScaleVector([current_position[0]-drone[0], 
+						  current_position[1]-drone[1], 
+						  current_position[2]-drone[2]], 1), seperation_gain)
 	
 	
 	
-	#final_direction = AvoidObstacles(ScaleVector([component/total_weight for component in total_vector], 1)) 
+		amount_of_drones += 1
+		
+	average_position[0] /= amount_of_drones
+	average_position[1] /= amount_of_drones
+	average_position[2] /= amount_of_drones
 	
+	to_average_position = ScaleVector([average_position[0]-current_position[0],
+			    	         average_position[1]-current_position[1],
+			                 average_position[2]-current_position[2]], cohesion_gain)
 	
-	#scale = math.dist([target_state[0], 
-	#		   target_state[1], 
-	#	     	   target_state[2]], 
-	#		  [current_state.pose.position.x,
-	#		   current_state.pose.position.y, 
-	#		   current_state.pose.position.z])
-	#		   
-	#return [final_direction[0] * scale, final_direction[1] * scale, (total_vector[2]/total_weight) * scale]
+	add_to_total(to_average_position, 1)
 	
 	return [total_vector[0]/total_weight, total_vector[1]/total_weight, total_vector[2]/total_weight]
 	
@@ -370,7 +368,7 @@ def CalculateBoidVector(current_state, target_state):
 #                                             Main Loop                                                              #
 #--------------------------------------------------------------------------------------------------------------------#
 
-movement_state = "init_traversing"
+movement_state = "init_manual"
 
 def main():
 	global movement_state
@@ -378,12 +376,20 @@ def main():
 	global target_state
 	
 
-	r = rospy.Rate(100)
+	r = rospy.Rate(50)
 	
 	while not rospy.is_shutdown():
-		current_state = get_model_srv(model)
+	
+		try:
+			current_state = get_model_srv(model)
+			
+		except rospy.ServiceException as e:
+			print(f'{arguments["model"]} failed to get model state ({rospy.Time.now()}): {e}')
+			continue
+			
 		current_position = [current_state.pose.position.x, current_state.pose.position.y, current_state.pose.position.z]
-
+		current_velocity = [current_state.twist.linear.x, current_state.twist.linear.y, current_state.twist.linear.z]
+		
 		if movement_state == "init_follow":
 			follow_PID = PIDController(3)
 			movement_state = "follow"
@@ -394,17 +400,25 @@ def main():
 			
 			relitive_target_state = [target_state[0] + leader_pos[0], 
 						 target_state[1] + leader_pos[1], 
-						 target_state[2] + leader_pos[2],
-						 0, 0, 0, ]
+						 target_state[2] + leader_pos[2]]
 						 
 			accel = follow_PID.Update(current_position, relitive_target_state)
+
+			accel = ClampVector(accel, 10)
+			
+			accel = AvoidObstacles(accel)
 					 
-			accel = ClampVector(accel, 10)	
-				 
+			#distance = math.dist(relitive_target_state, current_position)
+			 
+			#scale = min(follow_PID.Update([0], [distance])[0], 10)
+			
+			#accel = [i * scale for i in direction]
+			
 			PublishAcceleration(accel, current_state)
 		
 		elif movement_state == "init_manual":
 			manual_PID = PIDController(3)
+			manual_accel_PID = PIDController(3)
 			movement_state = 'manual'
 		
 		
@@ -413,10 +427,7 @@ def main():
 			accel = manual_PID.Update(current_position, target_state)
 
 			accel = ClampVector(accel, 10)
-			
-			#if(arguments['model'] == 'drone2'):
-			#	print(f'final accel: {accel}')
-			
+
 			PublishAcceleration(accel, current_state)
 		
 		elif movement_state == "init_traversing":
@@ -432,8 +443,8 @@ def main():
 			
 			scale = min(traversing_PID.Update([0], [distance])[0], 10)
 			
-			print(direction)
-			print(scale)
+			#print(direction)
+			#print(scale)
 			accel = [i * scale for i in direction]
 			 
 			PublishAcceleration(accel, current_state)
@@ -466,6 +477,7 @@ def main():
 			
 		else:
 			print(f"{movement_state} is not a valid movement state" )
+			movement_state = 'init_manual'
 
 		
 		drone_position = DronePosition()

@@ -11,19 +11,17 @@
 	
 	<param name="robot_description" textfile="$(find drone_swarm)/urdf/drone.urdf" />
 	<param name="default_movement_state" value="maual" />
-	<param name="amount_of_drones" value="2" />
+	<param name="amount_of_drones" value="5" />
 	<param name="leader_drone" value="drone1" />
 	
 	<group ns="drone1">
 		<param name="tf_prefix" value="drone1_tf" />
 		
-		<node name="spawn_drone1" pkg="gazebo_ros" type="spawn_model" args="-urdf -param /robot_description -x 10 -z 1 -model drone1 "> 
-			<remap from="laser" to="drone1_laser"/>
-		</node>
-		
+		<node name="spawn_drone1" pkg="gazebo_ros" type="spawn_model" args="-urdf -param /robot_description -x 10 -z 1 -model drone1 " /> 
+			
 		<node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
 		
-		<node name="drone1_controller" pkg="drone_swarm" type="drone_controller.py" args="model:=drone1 target_pos:=10,10,15" output="screen"/>
+		<node name="drone1_controller" pkg="drone_swarm" type="drone_controller.py" args="model:=drone1 target_pos:=0,0,15" output="screen"/>
 	</group>
 	
 	<group ns="drone2">
@@ -33,11 +31,42 @@
 
 		<node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
 		
-		<node name="drone2_controller" pkg="drone_swarm" type="drone_controller.py" args="model:=drone2" output="screen"/>
+		<node name="drone2_controller" pkg="drone_swarm" type="drone_controller.py" args="model:=drone2 target_pos:=-3,-3,15" output="screen"/>
 	</group>
 	
+	<group ns="drone3">
+		<param name="tf_prefix" value="drone3_tf" />
+		
+		<node name="spawn_drone3" pkg="gazebo_ros" type="spawn_model" args="-param /robot_description -urdf -z 1 -model drone3" />
+
+		<node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+		
+		<node name="drone3_controller" pkg="drone_swarm" type="drone_controller.py" args="model:=drone3 target_pos:=-3,3,15" output="screen"/>
+	</group>
 	
-	<node name="ground_control" pkg="drone_swarm" type="ground_control.py" args="amount_of_drones:=2" output="screen"/>
+	<group ns="drone4">
+		<param name="tf_prefix" value="drone4_tf" />
+		
+		<node name="spawn_drone4" pkg="gazebo_ros" type="spawn_model" args="-param /robot_description -urdf -z 1 -model drone4" />
+
+		<node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+		
+		<node name="drone4_controller" pkg="drone_swarm" type="drone_controller.py" args="model:=drone4 target_pos:=-6,-6,15" output="screen"/>
+	</group>
+	
+	<group ns="drone5">
+		<param name="tf_prefix" value="drone5_tf" />
+		
+		<node name="spawn_drone5" pkg="gazebo_ros" type="spawn_model" args="-param /robot_description -urdf -z 1 -model drone5" />
+
+		<node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+		
+		<node name="drone5_controller" pkg="drone_swarm" type="drone_controller.py" args="model:=drone5 target_pos:=-6,6,15" output="screen"/>
+	</group>
+		
+
+	
+	<node name="ground_control" pkg="drone_swarm" type="ground_control.py" args="amount_of_drones:=5" output="screen"/>
 	
 	<!-- node name="rviz" pkg="rviz" type="rviz"/ -->
 </launch> 

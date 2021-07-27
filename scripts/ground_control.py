@@ -3,6 +3,7 @@
 import PySimpleGUI as sg
 import rospy
 import sys
+import math
 
 from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import GetModelState, GetModelStateRequest
@@ -36,6 +37,7 @@ if(any([not i in arguments.keys() for i in mandatory_keys])):
 	raise ValueError('Not all mandatory keys are present. Check node arguments')
 
 amount_of_drones = int(rospy.get_param('/amount_of_drones'))
+leader_drone = rospy.get_param('/leader_drone')
 
 #--------------------------------------------------------------------------------------------------------------------#
 #                                             Node Setup                                                             #
@@ -72,7 +74,37 @@ def SendCommand(drone_name, req):
 	
 	except rospy.service.ServiceException as e:
 		return f'Command Failed: {e}'
+#--------------------------------------------------------------------------------------------------------------------#	
+#                                             Formations                                                             #
+#--------------------------------------------------------------------------------------------------------------------#
+def SendFormation(formation, offset=3, x=0, y=0, z=15, default=False):
+	if(default):
+		
+		offsets = [i * offset for i in range(-1 * math.floor(amount_of_drones/2), math.ceil(amount_of_drones/2))]
+		
+		for i, offset in enumerate(offsets, 1):
+			SendCommand(f'drone{i}', 'set_movement_state manual')
+			SendCommand(f'drone{i}', f'set_target 0 {offset} 15')
+			
+		return
+	
+	offsets = [i * offset for i in range(-1 * math.floor(amount_of_drones/2), math.ceil(amount_of_drones/2))]
+	
+	offsets.remove(0)
+	
+	for i, offset in enumerate(offsets, 2):
+		if offset == 0: continue
+		print(f'{i} set_target {offset} 0 0')
+		
+		SendCommand(f'drone{i}',  'set_movement_state follow')
+		if formation == 'chevron': SendCommand(f'drone{i}', f'set_target {-1 * abs(offset)} {offset} 0')
+			
+		elif formation == 'linear': SendCommand(f'drone{i}', f'set_target 0 {offset} 0')
+			
+		elif formation == 'parabolic': SendCommand(f'drone{i}', f'set_target {-0.3 * (offset**2)} {offset} 0')
+	
 
+			
 #--------------------------------------------------------------------------------------------------------------------#	
 #                                             GUI Layout                                                             #
 #--------------------------------------------------------------------------------------------------------------------#
@@ -110,10 +142,11 @@ follow_control_tab = [
 		       sg.Text('X:'),sg.Input(key='x_target_1', size=(4, 1), enable_events=True),
 		       sg.Text('Y:'),sg.Input(key='y_target_1', size=(4, 1), enable_events=True),
 		       sg.Text('Z:'),sg.Input(key='z_target_1', size=(4, 1), enable_events=True),
-		       sg.Button('Send', key='send_target_pos')],
+		       sg.Button('Send', key='send_leader_target_pos')],
 				
-		      [sg.Text('Set As Leader:', size=(20, 1)),
-		       sg.Button('Set', key='set_as_leader')]	
+		      [sg.Text('Formation:', size=(20, 1)),
+		       sg.Input(key='formation', size=(10, 1), enable_events=True),
+		       sg.Button('Set', key='set_formation')]	
 		     ]
 
 
@@ -127,7 +160,7 @@ info = sg.Frame("Drone Info", [[sg.Column([
 					   ], size = WindowSize(1, 0.2))]])
 
 drone_select = sg.Frame("Drone Select", [
-			    [sg.Listbox([f'drone{i+1}' for i in range(2)], key='drone_select', size=(13, 14), enable_events=True)]
+			    [sg.Listbox([f'drone{i+1}' for i in range(amount_of_drones)], key='drone_select', size=(13, 14), enable_events=True)]
 			    			      ])
 
 layout = [[sg.Text("Ground Control", size = (50, 1), font=("Helvetica", 20), justification="center")],
@@ -192,6 +225,11 @@ def UpdateDroneInfo(drone_name):
 	
 def main():
 	selected_drone = ''
+	
+	x_target = 0
+	y_target = 0
+	z_target = 0
+	
 	cont = True
 	
 	while (not rospy.is_shutdown()) and cont:
@@ -202,9 +240,12 @@ def main():
 
 		elif(event == 'tabs'):
         		print(values['tabs'])
-        		if(values['tabs'] == 'Manual Control'):
-        			for i in range(amount_of_drones):
+        		
+        		for i in range(amount_of_drones):
         				SendCommand(f'drone{i+1}', "update_params")
+        		
+        		if(values['tabs'] == 'Manual Control'):
+        			SendFormation('manual_default', offset=5, default=True)
         			
         		elif(values['tabs'] == 'Follow Control'):
         			pass
@@ -226,15 +267,19 @@ def main():
 				
 			else:
 				print('Ground Control: send_pid failed, not all values are present')	
-				
-		elif(event == 'send_target_pos'):
-			if AreAllValuesPresent(['y_target', 'x_target', 'z_target'], values):
-				print(values["x_target"])
-				SendCommand(selected_drone, f'set_target {values["x_target"]} {values["y_target"]} {values["z_target"]}')
-				
 		
-			else:	
-				print('Ground Control: send_target failed, not all values are present')
+		elif('x_target' in event): x_target = TryFloat(values[event])	
+		elif('y_target' in event): y_target = TryFloat(values[event])	
+		elif('z_target' in event): z_target = TryFloat(values[event])	
+			
+		elif(event == 'send_target_pos'):
+			SendCommand(selected_drone, f'set_target {x_target} {y_target} {z_target}')
+			
+		elif(event == 'send_leader_target_pos'):
+			SendCommand(leader_drone, f'set_target {x_target} {y_target} {z_target}')
+
+		elif(event == 'set_formation'):
+			SendFormation(values['formation'])
 		
 		elif(event == 'send_movement_state'):
 			if AreAllValuesPresent(['drone_select', 'new_state'], values):
