@@ -59,6 +59,8 @@ add_message_files(
  add_service_files(
    FILES
    Command.srv
+   FindPath.srv
+   IsPointClear.srv
 )
 
 ## Generate actions in the 'action' folder

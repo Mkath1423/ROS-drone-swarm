@@ -1,0 +1,241 @@
+#!/usr/bin/env python	
+
+import rospy
+import sys
+import math
+import numpy as np
+import tf
+ 
+
+from gazebo_msgs.msg import ModelState
+from gazebo_msgs.srv import GetModelState, GetModelStateRequest
+from drone_swarm.srv import *
+from drone_swarm.msg import *
+from sensor_msgs.msg import LaserScan
+
+import std_msgs
+
+resolution = 0.2
+
+'''
+x_size = 100
+y_size = 100
+z_size = 100
+
+scaler_field = [[[0 for i in range(x_size)] for i in range(y_size)] for i in range(z_size)]
+'''
+
+obstacles = []
+
+#--------------------------------------------------------------------------------------------------------------------#
+#                                         Utility Functions                                                          #
+#--------------------------------------------------------------------------------------------------------------------#
+
+def WorldToGrid(point, snapped=True):
+	if snapped:
+		return [round(point[0]/resolution), round(point[1]/resolution), round(point[2]/resolution)]
+		
+	else:
+		return [point[0]/resolution, point[1]/resolution, point[2]/resolution]	
+
+def GridToWorld(point):
+	return [point[0]*resolution, point[1]*resolution, point[2]*resolution]
+#--------------------------------------------------------------------------------------------------------------------#
+#                                            Pathfinding                                                             #
+#--------------------------------------------------------------------------------------------------------------------#
+
+class Node():
+	def __init__(self, position, parent=None, is_start=False):
+	
+		self.is_start = is_start
+	
+		self.position = position
+		self.parent = parent
+		
+		self.h = None
+		self.g = 0 if is_start else math.inf
+		self.f = 0
+	
+	def __eq__(self, other):
+		return self.position == other.position
+	
+	def calculate_heuristic(self, end):
+	
+		self.h = math.distance(end, self.position)
+		
+	def calculate_g(self, parent):
+		
+		similar = 0
+		if(parent.position[0] == self.position.[0]): similar += 1
+		if(parent.position[1] == self.position.[1]): similar += 1
+		if(parent.position[2] == self.position.[2]): similar += 1
+	
+		new_g = parent.g + [17, 14, 10, 0][similar]
+	
+		if(new_g < self.g):
+			self.g = new_g
+			self.parent = parent
+
+			self.f = self.g + self.h
+			
+		
+
+neighbour_increments = [[i, j, k] for i in range(-1, 2) for j in range(-1, 2) for k in range(-1, 2)] 
+	
+neighbour_increments.remove([0, 0, 0])
+	
+def find_all_neighbours(point):
+	return [[point[0] + neighbour_increment[0], 
+		 point[1] + neighbour_increment[1], 
+		 point[2] + neighbour_increment[2]] 
+		 for neighbour_increment in neighbour_increments]
+	
+def find_node_with_lowest_f(nodes):
+	lowest_index = 0
+	lowest_value = math.inf	
+	
+	for i, node in enumerate(node):
+		if node.f < lowest_value:
+			lowest_index = i
+			lowest_value = node.f
+			
+	return nodes[lowest_index]
+	
+def find_path(start, end):
+	
+	startNode = Node(start, is_start = True)
+	startNode.calculate_heuristic(end)
+	
+	openNodes = [startNode]
+	closedNodes = []
+	
+	endNode = None
+	
+	#----------find end node----------#
+	
+	while endNode == None:
+		currentNode = find_node_with_lowest_f(openNodes)
+		openNodes.remove(currentNode)
+		closedNodes.append(currentNode)
+		
+		if(currentNode.position == end):
+			endNode = currentNode
+			continue
+			
+		for neighbour in find_all_neighbours(currentNode.position):
+			neighbourNode = Node(neighbour)
+			if (neighbourNode in closedNodes) or (neighbour in obstacles):
+				continue
+				
+			if(neighbourNode in openNodes):
+				openNodes[openNodes.indexof(neighbourNode)].calculate_g(currentNode)
+			else:
+				neighbourNode.calculate_heuristic(end)
+				neighbourNode.calculate_g(currentNode)
+				openNodes.append(neighbourNode)
+				
+	#----return all points in path----#
+	
+	# get all nodes in path
+	path = []
+	while True:
+		if(path[-1].is_start == True): break
+		
+		path.append(path[-1].parent)
+	
+	# convert node into world position
+	out = []
+	for node in path:
+		out.append(GridToWorld(node.position))
+		
+	return out 
+#--------------------------------------------------------------------------------------------------------------------#
+#                                          Update Obstacles                                                          #
+#--------------------------------------------------------------------------------------------------------------------#
+
+def UpdateObstacles(data, drone_position):
+	for i, laser in list(enumerate(data.ranges))[::5]
+		if laser == float('inf'):
+			continue
+			#   if infinity (maybe add later) 
+			#	check if the line intersects with any obstacles
+			#	remove those obstacles
+		else:
+			obstacles.append(
+				WorldToGrid([laser*unit_vectors[i][0] + drone_position[0], 
+				  	     laser*unit_vectors[i][1] + drone_position[1], 
+					     drone_position[2]], snapped=True)
+					     )
+
+#--------------------------------------------------------------------------------------------------------------------#
+#                                             Node Setup                                                             #
+#--------------------------------------------------------------------------------------------------------------------#
+
+rospy.init_node(f"pathfinder")
+
+#-----------------Drone-Position-Subsriber-----------------#
+
+drone_positions = {}
+def set_drone_position(data):
+	global drone_positions
+
+	drone_positions[data.drone_name] = [float(data.x), float(data.y), float(data.z)]
+	
+drone_position_sub =  []
+for i in range(1, amount_of_drones + 1):
+	drone_position_sub.append(rospy.Subscriber(f'/drone{i}/position', DronePosition, set_drone_position))
+
+#------------------Drone-Laser-Subsriber-------------------#
+
+# The unit vectors of each laser cast
+unit_vectors = []
+
+
+# Number of laser casts
+samples = 0
+
+laser_initialized = False
+
+def OnLaserStart(data):
+	global laser_initialized
+	global unit_vectors
+	global samples
+	
+	# Calculate the unit vectors for each of the laser casts
+	for theta in [data.angle_min + (data.angle_increment * i) for i in range(len(data.ranges))]:
+		unit_vectors.append([math.cos(theta), math.sin(theta)])
+	
+	samples = len(unit_vectors)
+	laser_initialized = True
+
+
+def handle_laser(data):
+	global laser_data
+	if laser_initialized == False: OnLaserStart(data)
+	
+	UpdateObstacles(data, drone_positions[data.frame_id[:6]])
+	
+laser_subs = []
+for i in range(1, amount_of_drones + 1):
+	laser_subs.append(rospy.Subscriber(f'drone{i}/laser', LaserScan, handle_laser))
+
+#--------------------Find-Path-Service--------------------#
+
+def find_path(req):
+	out = FindPathResponse()
+	
+	return out
+
+pathfinder_service = rospy.Service('find_path', FindPath, find_path)
+
+#-----------------Is-Point-Clear-Service------------------#
+
+def is_point_clear(req):
+	out = IsPointClearResponse()
+	out.is_point_clear = WorldToGrid(req.point, snapped=True) in obstacles
+	
+	return out
+
+
+is_point_clear_service = rospy.Service('is_point_clear', IsPointClear, is_point_clear)
+

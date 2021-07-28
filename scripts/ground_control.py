@@ -4,6 +4,7 @@ import PySimpleGUI as sg
 import rospy
 import sys
 import math
+import random
 
 from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import GetModelState, GetModelStateRequest
@@ -75,18 +76,20 @@ def SendCommand(drone_name, req):
 	except rospy.service.ServiceException as e:
 		return f'Command Failed: {e}'
 #--------------------------------------------------------------------------------------------------------------------#	
-#                                             Formations                                                             #
+#                                                  Formations                                                        #
 #--------------------------------------------------------------------------------------------------------------------#
-def SendFormation(formation, offset=3, x=0, y=0, z=15, default=False):
-	if(default):
-		
-		offsets = [i * offset for i in range(-1 * math.floor(amount_of_drones/2), math.ceil(amount_of_drones/2))]
-		
-		for i, offset in enumerate(offsets, 1):
-			SendCommand(f'drone{i}', 'set_movement_state manual')
-			SendCommand(f'drone{i}', f'set_target 0 {offset} 15')
-			
-		return
+def SendFormation(formation, offset=3, x=0, y=0, z=15):
+	#if(default):
+	#	
+	#	offsets = [i * offset for i in range(-1 * math.floor(amount_of_drones/2), math.ceil(amount_of_drones/2))]
+	#	
+	#	for i, offset in enumerate(offsets, 1):
+	#		SendCommand(f'drone{i}', 'set_movement_state manual')
+	#		SendCommand(f'drone{i}', f'set_target 0 {offset} 15')
+	#		
+	#	return
+	
+	SendCommand('drone1', f'set_target {x} {y} {z}')
 	
 	offsets = [i * offset for i in range(-1 * math.floor(amount_of_drones/2), math.ceil(amount_of_drones/2))]
 	
@@ -96,14 +99,12 @@ def SendFormation(formation, offset=3, x=0, y=0, z=15, default=False):
 		if offset == 0: continue
 		print(f'{i} set_target {offset} 0 0')
 		
-		SendCommand(f'drone{i}',  'set_movement_state follow')
-		if formation == 'chevron': SendCommand(f'drone{i}', f'set_target {-1 * abs(offset)} {offset} 0')
+		SendCommand(f'drone{i}',  'set_movement_state manual')
+		if formation == 'chevron': SendCommand(f'drone{i}', f'set_target {-1 * abs(offset) + x} {offset + y} {z}')
 			
-		elif formation == 'linear': SendCommand(f'drone{i}', f'set_target 0 {offset} 0')
+		elif formation == 'linear': SendCommand(f'drone{i}', f'set_target {x} {offset + y} {z}')
 			
-		elif formation == 'parabolic': SendCommand(f'drone{i}', f'set_target {-0.3 * (offset**2)} {offset} 0')
-	
-
+		elif formation == 'parabolic': SendCommand(f'drone{i}', f'set_target {-0.3 * (offset**2) + x} {offset + y} {z}')
 			
 #--------------------------------------------------------------------------------------------------------------------#	
 #                                             GUI Layout                                                             #
@@ -142,16 +143,25 @@ follow_control_tab = [
 		       sg.Text('X:'),sg.Input(key='x_target_1', size=(4, 1), enable_events=True),
 		       sg.Text('Y:'),sg.Input(key='y_target_1', size=(4, 1), enable_events=True),
 		       sg.Text('Z:'),sg.Input(key='z_target_1', size=(4, 1), enable_events=True),
-		       sg.Button('Send', key='send_leader_target_pos')],
+		       sg.Button('Send', key='send_formation_target_pos')],
 				
 		      [sg.Text('Formation:', size=(20, 1)),
 		       sg.Input(key='formation', size=(10, 1), enable_events=True),
 		       sg.Button('Set', key='set_formation')]	
 		     ]
 
+boids_control_tab = [
+		      [sg.Text('Target Pos:', size=(20, 1)), 
+		       sg.Text('X:'),sg.Input(key='x_target_2', size=(4, 1), enable_events=True),
+		       sg.Text('Y:'),sg.Input(key='y_target_2', size=(4, 1), enable_events=True),
+		       sg.Text('Z:'),sg.Input(key='z_target_2', size=(4, 1), enable_events=True),
+		       sg.Button('Send', key='send_swarm_target_pos')]
+			]
+
 
 tabs = sg.TabGroup([[sg.Tab("Manual Control", manual_control_tab),
-		     sg.Tab("Follow Control", follow_control_tab)]], size=WindowSize(0.79, 0.53), enable_events = True, key='tabs')
+		     sg.Tab("Follow Control", follow_control_tab),
+		     sg.Tab("Boid Control", boids_control_tab)]], size=WindowSize(0.79, 0.53), enable_events = True, key='tabs')
 
 info = sg.Frame("Drone Info", [[sg.Column([
 					    [sg.Text(drone_position_info(0, 0, 0), size = (40, 1), key = "drone_position_info"), sg.Text(drone_pid_info(0, 0, 0), size = (40, 1), key = "drone_pid_info")],
@@ -245,10 +255,16 @@ def main():
         				SendCommand(f'drone{i+1}', "update_params")
         		
         		if(values['tabs'] == 'Manual Control'):
-        			SendFormation('manual_default', offset=5, default=True)
+        			for i in range(amount_of_drones):
+        				SendCommand(f'drone{i+1}', "set_movement_state manual")
         			
         		elif(values['tabs'] == 'Follow Control'):
-        			pass
+        			for i in range(amount_of_drones):
+        				SendCommand(f'drone{i+1}', "set_movement_state manual")
+        			
+        		elif(values["tabs"] == 'Boid Control'):
+        			for i in range(1, amount_of_drones + 1):
+        				SendCommand(f'drone{i}', 'set_movement_state traversing')
 	
 		elif(event == 'drone_select'):
 			selected_drone = values["drone_select"][0]
@@ -275,9 +291,16 @@ def main():
 		elif(event == 'send_target_pos'):
 			SendCommand(selected_drone, f'set_target {x_target} {y_target} {z_target}')
 			
-		elif(event == 'send_leader_target_pos'):
-			SendCommand(leader_drone, f'set_target {x_target} {y_target} {z_target}')
+		elif(event == 'send_formation_target_pos'):
+			if AreAllValuesPresent(['formation'], values):
+				SendFormation(values['formation'], x=x_target, y=y_target, z=z_target)
+			else:
+				print('Ground Control: send formation target failed, not all values are present')
 
+		elif(event == 'send_swarm_target_pos'):
+			for i in range(1, amount_of_drones + 1):
+				SendCommand(f'drone{i}', f'set_target {x_target + random.randrange(-12, 12, 3)} {y_target + random.randrange(-12, 12, 3)} {z_target}')
+		
 		elif(event == 'set_formation'):
 			SendFormation(values['formation'])
 		

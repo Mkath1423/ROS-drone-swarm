@@ -132,9 +132,9 @@ set_target_sub = rospy.Subscriber('set_target', SetTarget, set_target)
 #--------------------------------------------------------------------------------------------------------------------#
 #                                             PID controls Setup                                                     #
 #--------------------------------------------------------------------------------------------------------------------#
-P_GAIN = 5
+P_GAIN = 1
 I_GAIN = 0
-D_GAIN = 5
+D_GAIN = 10
  
 def set_pid(data):
 	global P_GAIN
@@ -154,7 +154,7 @@ set_pid_sub = rospy.Subscriber('set_pid', SetPID, set_pid)
 # PD = lambda e, el: P_GAIN * e + D_GAIN * (e - el)
 
 class PIDController():
-	def __init__(self, axes, P_GAIN=5, I_GAIN=0, D_GAIN=5):
+	def __init__(self, axes, P_GAIN=1, I_GAIN=0, D_GAIN=10):
 		
 		self.axes = axes
 		
@@ -199,15 +199,15 @@ path = [[0, 0, 15], [5, 4, 16], [10, 9, 20]]
 #                                          Obstacle Avoidance                                                        #
 #--------------------------------------------------------------------------------------------------------------------#
 
-# The unirt vectors of each laser cast
+# The unit vectors of each laser cast
 unit_vectors = []
-unit_vectors_calculated = False
+laser_initialized = False
 
 # Number of laser casts
 samples = 0
 
 def OnLaserStart(data):
-	global unit_vectors_calculated
+	global laser_initialized
 	global unit_vectors
 	global samples
 	
@@ -217,22 +217,26 @@ def OnLaserStart(data):
 		#print(unit_vectors[-1])
 	
 	samples = len(unit_vectors)
-	unit_vectors_calculated = True
+	laser_initialized = True
 
 laser_data = LaserScan() 
 
 
 def handle_laser(data):
 	global laser_data
-	if unit_vectors_calculated == False: OnLaserStart(data)
+	if laser_initialized == False: OnLaserStart(data)
 	
 	laser_data = data
+	print(laser_data)
 	
 	
 laser_sub = rospy.Subscriber('laser', LaserScan, handle_laser)
 
 def AvoidObstacles(target_vector):
 	global unit_vectors
+	
+	if(len(laser_data.ranges) < samples): return target_vector
+	if(laser_initialized == False): return target_vector
 	
 	# store the length and direction of the target vector
 	length = VectorLength(target_vector)
@@ -242,14 +246,12 @@ def AvoidObstacles(target_vector):
 	# determine all the obstructed directions
 	# store their indcies
 	obstacles = []
-	
-	start = None
+
 	for i, distance in enumerate(laser_data.ranges):
 		if not math.isinf(distance):
 			for j in range(i-30, i+31):
-				obstacles.append(j % samples)
-	
-	obstacles = list(dict.fromkeys(obstacles))
+				if(j % samples not in obstacles):
+					obstacles.append(j % samples)
 	
 	# determine all non obstructed directions
 	# store their incices
@@ -288,10 +290,15 @@ def AvoidObstacles(target_vector):
 			difference = math.acos(max(min(unit_vectors[obstacle][0]*target_direction[0] + unit_vectors[obstacle][1]*target_direction[1], 1), -1))
 			
 			if(difference < closest_obstacle_difference):
-				closest_obstacle_difference = unit_vectors[path]
+				closest_obstacle_difference = unit_vectors[obstacle]
 				closest_obstacle_difference = difference
-				obstacle_index = i
+				obstacle_index = obstacle
 	
+	try:
+		x= laser_data.ranges[obstacle_index]
+		
+	except IndexError:
+		print(f'{obstacle_index} is not in range {len(laser_data.ranges)}')
 	if(not laser_data.ranges[obstacle_index] == float('inf')):
 		length = 10 / laser_data.ranges[obstacle_index]
 	
@@ -391,33 +398,7 @@ def main():
 		current_position = [current_state.pose.position.x, current_state.pose.position.y, current_state.pose.position.z]
 		current_velocity = [current_state.twist.linear.x, current_state.twist.linear.y, current_state.twist.linear.z]
 		
-		if movement_state == "init_follow":
-			follow_PID = PIDController(3)
-			movement_state = "follow"
-		
-		elif movement_state == "follow":
-		
-			leader_pos = drone_positions[leader_drone]
-			
-			relitive_target_state = [target_state[0] + leader_pos[0], 
-						 target_state[1] + leader_pos[1], 
-						 target_state[2] + leader_pos[2]]
-						 
-			accel = follow_PID.Update(current_position, relitive_target_state)
-
-			accel = ClampVector(accel, 10)
-			
-			accel = AvoidObstacles(accel)
-					 
-			#distance = math.dist(relitive_target_state, current_position)
-			 
-			#scale = min(follow_PID.Update([0], [distance])[0], 10)
-			
-			#accel = [i * scale for i in direction]
-			
-			PublishAcceleration(accel, current_state)
-		
-		elif movement_state == "init_manual":
+		if movement_state == "init_manual":
 			manual_PID = PIDController(3)
 			manual_accel_PID = PIDController(3)
 			movement_state = 'manual'
@@ -429,6 +410,8 @@ def main():
 
 			accel = ClampVector(accel, 10)
 
+			accel = AvoidObstacles(accel)
+			
 			PublishAcceleration(accel, current_state)
 		
 		elif movement_state == "init_traversing":
