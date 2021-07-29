@@ -12,6 +12,7 @@ from gazebo_msgs.srv import GetModelState, GetModelStateRequest
 from drone_swarm.srv import *
 from drone_swarm.msg import *
 from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Point
 
 import std_msgs
 
@@ -72,6 +73,8 @@ leader_drone = rospy.get_param('/leader_drone', "")
 rospy.init_node(f"drone_{arguments['model']}")
 print(f'drone controller for model {arguments["model"]} has started')
 
+#----------------------Gazebo-Model------------------------#
+
 # to get the position of the model
 rospy.wait_for_service('/gazebo/get_model_state')
 get_model_srv = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
@@ -106,6 +109,9 @@ def PublishAcceleration(accel, current_state):
 # to publish the current position of this drone
 position_pub = rospy.Publisher('position', DronePosition, queue_size=10)
 
+
+#---------------Drone-Position-Subscribers-----------------#
+
 # subscribe to the position of all other drones
 drone_positions = {}
 def set_drone_position(data):
@@ -118,6 +124,7 @@ for i in range(1, amount_of_drones + 1):
 	if(str(i) == arguments['model'][-1]): continue
 	drone_position_sub.append(rospy.Subscriber(f'/drone{i}/position', DronePosition, set_drone_position))
 
+'''
 # set target
 def set_target(data):
 	global target_state
@@ -126,8 +133,15 @@ def set_target(data):
 	print(target_state)
 
 set_target_sub = rospy.Subscriber('set_target', SetTarget, set_target)
+'''
 
+#-------------------Pathfinder-Clients---------------------#
 
+rospy.wait_for_service('/pathfinder/find_path')
+find_path_srv = rospy.ServiceProxy('/pathfinder/find_path', FindPath)
+
+rospy.wait_for_service('/pathfinder/is_point_clear')
+is_point_clear_srv = rospy.ServiceProxy('/pathfinder/is_point_clear', IsPointClear)
 
 #--------------------------------------------------------------------------------------------------------------------#
 #                                             PID controls Setup                                                     #
@@ -227,7 +241,7 @@ def handle_laser(data):
 	if laser_initialized == False: OnLaserStart(data)
 	
 	laser_data = data
-	print(laser_data)
+	#print(laser_data)
 	
 	
 laser_sub = rospy.Subscriber('laser', LaserScan, handle_laser)
@@ -383,6 +397,7 @@ def main():
 	global path
 	global target_state
 	
+	print(f'{arguments["model"]} called main')
 
 	r = rospy.Rate(50)
 	
@@ -439,6 +454,7 @@ def main():
 			target_state = path[0]
 			movement_state = "path"
 		
+		
 		elif movement_state == "path":
 			
 			if(len(path) == 0):
@@ -451,9 +467,20 @@ def main():
 			   abs(path[0][2] - current_position[2]) < 0.5):
 				target = path.pop(0)
 				target_state = target
-				
+			
+			next_free_node = 0
+			for node in path:
+				if(is_point_clear_srv(IsPointClearRequest(path[0])).is_point_clear):
+					break
+				next_free_node += 1
+			
+			if next_free_node != 0:
+				path_segment = find_path_srv(FindPathRequest(current_position, path[next_free_node]))
+				path_segment = [[point.x, point.y, point.z] for point in path_segment]
+				path = path_segment + path[:next_free_node]
+			
 			if(len(path) > 0):
-				accel = path_PID.Update(current_position, target_state)
+				accel = path_PID.Update(current_position, path[0])
 					 
 				accel = ClampVector(accel, 10)	
 					 
@@ -491,7 +518,7 @@ if 'target_pos' in arguments:
 #--------------------------------------------------------------------------------------------------------------------#
 
 def handle_command(req):
-	
+	global path
 	command = req.command.split()
 	try:
 		if(len(command) == 0): raise ValueError("no command specified")
@@ -544,13 +571,23 @@ def handle_command(req):
 				return CommandResponse(True, f"{P_GAIN} {I_GAIN} {D_GAIN}")
 			
 			elif(command[1] == 'target_pos'):
-				print(f"True target state: {target_state[0]} {target_state[1]} {target_state[2]}")
+				#print(f"True target state: {target_state[0]} {target_state[1]} {target_state[2]}")
 				return CommandResponse(True, f"{target_state[0]} {target_state[1]} {target_state[2]}")
 				
 			elif(command[1] == 'movement_state'):
 				return CommandResponse(True, movement_state)
-				
-
+			
+			elif(command[1] == 'path'):
+				return CommandResponse(True, path)
+			
+		elif(command[0] == 'set_path'):
+			
+			if(len(command) != 7): raise ValueError("command 'set_path' expects 6 arguments (x y z x y z)")
+			path = find_path_srv(FindPathRequest([float(command[1]), float(command[2]), float(command[3])], [float(command[4]), float(command[5]), float(command[6])]))
+			
+			path = [[node.x, node.y, node.z] for node in path.path]
+			print(path)
+			
 			
 		else:
 			return CommandResponse(False, f"COMMAND FAILED: no command found '{command[0]}'")

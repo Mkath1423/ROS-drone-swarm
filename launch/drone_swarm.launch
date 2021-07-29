@@ -65,7 +65,7 @@
 	</group>
 		
 
-	
+	<node name="pathfinder" pkg="drone_swarm" type="pathfinder.py" output="screen" />
 	<node name="ground_control" pkg="drone_swarm" type="ground_control.py" args="amount_of_drones:=5" output="screen"/>
 	
 	<!-- node name="rviz" pkg="rviz" type="rviz"/ -->

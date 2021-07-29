@@ -157,11 +157,20 @@ boids_control_tab = [
 		       sg.Text('Z:'),sg.Input(key='z_target_2', size=(4, 1), enable_events=True),
 		       sg.Button('Send', key='send_swarm_target_pos')]
 			]
+			
+pathing_control_tab = [
+		      [sg.Text('Target Pos:', size=(20, 1)), 
+		       sg.Text('X:'),sg.Input(key='x_target_3', size=(4, 1), enable_events=True),
+		       sg.Text('Y:'),sg.Input(key='y_target_3', size=(4, 1), enable_events=True),
+		       sg.Text('Z:'),sg.Input(key='z_target_3', size=(4, 1), enable_events=True),
+		       sg.Button('Send', key='set_path')]
+			]
 
 
 tabs = sg.TabGroup([[sg.Tab("Manual Control", manual_control_tab),
 		     sg.Tab("Follow Control", follow_control_tab),
-		     sg.Tab("Boid Control", boids_control_tab)]], size=WindowSize(0.79, 0.53), enable_events = True, key='tabs')
+		     sg.Tab("Boid Control", boids_control_tab),
+		     sg.Tab("Path Control", pathing_control_tab)]], size=WindowSize(0.79, 0.53), enable_events = True, key='tabs')
 
 info = sg.Frame("Drone Info", [[sg.Column([
 					    [sg.Text(drone_position_info(0, 0, 0), size = (40, 1), key = "drone_position_info"), sg.Text(drone_pid_info(0, 0, 0), size = (40, 1), key = "drone_pid_info")],
@@ -303,7 +312,17 @@ def main():
 		
 		elif(event == 'set_formation'):
 			SendFormation(values['formation'])
-		
+		elif(event == 'set_path'):
+			if selected_drone == '': continue
+			args = [TryFloat(drone_positions[selected_drone][0]),
+				TryFloat(drone_positions[selected_drone][1]),
+				TryFloat(drone_positions[selected_drone][2]),
+				x_target,
+				y_target,
+				z_target] 
+				
+			SendCommand(selected_drone, f'set_path {args[0]} {args[1]} {args[2]} {args[3]} {args[4]} {args[5]}')
+			
 		elif(event == 'send_movement_state'):
 			if AreAllValuesPresent(['drone_select', 'new_state'], values):
 				SendCommand(selected_drone, f'set_movement_state {values["new_state"]}')
