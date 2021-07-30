@@ -1,0 +1,11 @@
+Pathfinding Explination:
+
+The first set of outputs:
+	Each node that the pathfinder explores.
+	The values corospond to how long it takes to get to the node 
+	and how far from the target the node is.
+	These values turn into a score that the pathfinder will use to find
+	the mose desireable path.
+
+The second set of outputs:
+	Each node in the path.
