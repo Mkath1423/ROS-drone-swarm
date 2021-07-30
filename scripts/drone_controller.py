@@ -456,29 +456,34 @@ def main():
 		
 		
 		elif movement_state == "path":
-			
+			##
 			if(len(path) == 0):
 				print('path_complete')
 				movement_state = 'init_manual'
 				continue
-				
+			##	
 			if(abs(path[0][0] - current_position[0]) < 0.5 and
 			   abs(path[0][1] - current_position[1]) < 0.5 and
 			   abs(path[0][2] - current_position[2]) < 0.5):
-				target = path.pop(0)
-				target_state = target
+				target_state =  path.pop(0)
+				#print(f'reached node at {target}')
 			
 			next_free_node = 0
-			for node in path:
-				if(is_point_clear_srv(IsPointClearRequest(path[0])).is_point_clear):
+			for i, node in enumerate(path):
+				if(is_point_clear_srv(IsPointClearRequest(node)).is_point_clear):
+					
 					break
-				next_free_node += 1
+				print(f'node {next_free_node} is not clear')
+				
+			
+			next_free_node = i
 			
 			if next_free_node != 0:
 				path_segment = find_path_srv(FindPathRequest(current_position, path[next_free_node]))
-				path_segment = [[point.x, point.y, point.z] for point in path_segment]
-				path = path_segment + path[:next_free_node]
-			
+				path_segment = [[point.x, point.y, point.z] for point in path_segment.path]
+				print(path_segment)
+				path = path_segment + path[next_free_node:]
+			##
 			if(len(path) > 0):
 				accel = path_PID.Update(current_position, path[0])
 					 

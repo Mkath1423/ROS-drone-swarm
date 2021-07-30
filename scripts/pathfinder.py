@@ -116,8 +116,8 @@ def find_node_with_lowest_f(nodes):
 
 #--------------------Pathing-Algorithm---------------------#
 
-def find_path(start, end):
-	print(start, end)
+def find_path(start, end, display=False):
+	#print(start, end)
 	startNode = Node(start, is_start = True)
 	startNode.calculate_heuristic(end)
 	
@@ -131,7 +131,7 @@ def find_path(start, end):
 	while endNode == None:
 		currentNode = find_node_with_lowest_f(openNodes)
 		
-		print(f'{currentNode.position} {currentNode.h} {currentNode.g} {currentNode.f}')
+		if(display): print(f'{currentNode.position} {currentNode.h} {currentNode.g} {currentNode.f}')
 		
 		#for node in openNodes:
 		#	print(f'{node.position} {node.h} {node.g} {node.f}')
@@ -165,7 +165,7 @@ def find_path(start, end):
 	current_node = endNode
 	
 	while True:
-		#print(current_node.position)
+		if(display): print(current_node.position)
 		path.append(current_node.position)
 		
 		if(current_node.is_start): break
@@ -189,12 +189,18 @@ def UpdateObstacles(data, drone_position):
 			#	check if the line intersects with any obstacles
 			#	remove those obstacles
 		else:
-			obstacle_location = [laser*unit_vectors[i][0] + drone_position[0], 
+			obstacle_location = WorldToGrid( 
+					    [
+					     laser*unit_vectors[i][0] + drone_position[0], 
 				  	     laser*unit_vectors[i][1] + drone_position[1], 
-					     drone_position[2]]
+					     drone_position[2]
+					    ],snapped=True)
 					     
 			if(not obstacle_location in obstacles): 
-				obstacles.append(WorldToGrid(obstacle_location, snapped=True))
+				obstacles.append(obstacle_location)
+				#print(f'obstacle found at {[obstacles[-1]]}')
+				
+	#print(obstacles, "\n\n\n\n")
 
 #--------------------------------------------------------------------------------------------------------------------#
 #                                             Node Setup                                                             #
@@ -274,7 +280,7 @@ pathfinder_service = rospy.Service('pathfinder/find_path', FindPath, find_path_h
 
 def is_point_clear(req):
 	out = IsPointClearResponse()
-	out.is_point_clear = WorldToGrid(req.point, snapped=True) in obstacles
+	out.is_point_clear = not WorldToGrid(req.point, snapped=True) in obstacles
 	
 	return out
 
