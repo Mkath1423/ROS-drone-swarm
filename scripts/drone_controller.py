@@ -27,18 +27,69 @@ def set_movement_state(req):
 #--------------------------------------------------------------------------------------------------------------------#
 
 def VectorLength(vector):
+	'''
+	Calculates the length of a given vector.
+
+        Parameters
+        ----------
+        vector: float[]
+		the vector you want the length of
+
+        Returns
+        -------
+        float
+        	the length of the vector
+        '''
 	return math.sqrt(sum([i**2 for i in vector]))
 
 def ScaleVector(vector, newLength):
+	'''
+	Scales a vector to a given length.
+
+        Parameters
+        ----------
+        vector: float[]
+		the vector you want to scale
+
+	newLength: float	
+		the length of the vector after scaling
+		
+        Returns
+        -------
+        float[]
+        	the scaled vector
+        '''
+
 	length = VectorLength(vector)
 	if length == 0: return [0 for i in vector]
 	return [newLength*i/length for i in vector]
 	
-def ClampVector(vector, max_magnitude):
+def ClampVector(vector, maxLength):
+	'''
+	Clamps a vector to a maximumn legth.
+	
+	If the length of the vector is shorter than the max length the 
+	original vector is returned. Otherwise the vector is scaled to 
+	the max length and then returned.
+
+        Parameters
+        ----------
+        vector: float[]
+		the vector you want to clamp
+
+	maxLength: float	
+		the maximum length of the vector
+		
+        Returns
+        -------
+        float[]
+        	the clamped vector
+        '''
+
 	length = VectorLength(vector)
 	
-	if length > max_magnitude:
-		return [max_magnitude*i/length for i in vector]
+	if length > maxLength:
+		return [maxLength*i/length for i in vector]
 	else:
 		return vector
 		
@@ -86,6 +137,25 @@ model.model_name = arguments['model']
 state_pub = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=10)
 
 def PublishAcceleration(accel, current_state):
+	'''
+	Publish the acceleration of the drone model.
+	
+	Add accel to the current velocity and publish
+	the model state to the drone's model. 
+
+        Parameters
+        ----------
+        accel: float[]
+		the drone's acceleration
+
+	current_state: ModelState	
+		the current state of the drone
+		
+        Returns
+        -------
+        None
+        '''
+        
 	new_state = ModelState()
 
 	new_state.model_name = arguments['model']
@@ -106,6 +176,7 @@ def PublishAcceleration(accel, current_state):
 	new_state.twist.linear.z = velocity[2]
 		
 	state_pub.publish(new_state)
+
 # to publish the current position of this drone
 position_pub = rospy.Publisher('position', DronePosition, queue_size=10)
 
@@ -149,7 +220,8 @@ is_point_clear_srv = rospy.ServiceProxy('/pathfinder/is_point_clear', IsPointCle
 P_GAIN = 1
 I_GAIN = 0
 D_GAIN = 10
- 
+
+'''
 def set_pid(data):
 	global P_GAIN
 	global I_GAIN
@@ -161,15 +233,42 @@ def set_pid(data):
 	
 	print(f"{P_GAIN} {I_GAIN} {D_GAIN}")
 
+
 set_pid_sub = rospy.Subscriber('set_pid', SetPID, set_pid)
- 
+'''
  
 # PID = lambda e, el, et : P_GAIN * e + I_GAIN * et + D_GAIN * (e - el)
 # PD = lambda e, el: P_GAIN * e + D_GAIN * (e - el)
 
 class PIDController():
 	def __init__(self, axes, P_GAIN=1, I_GAIN=0, D_GAIN=10):
+		'''
+		Initializes a PIDController
+	
+        	Parameters
+        	----------
+        	axes: int
+			the amount of axes the controller should control.
+			 [x, y, z] would be three axes
+			 [distance to target] would be one axis
+	
 		
+		Key Word Args
+		-------------
+		P_GAIN: float
+			proportional gain
+			
+		I_GAIN: float
+			integral gain
+			
+		D_GAIN: float
+			derivative gain
+			
+        	Returns
+       	-------
+       	None
+       	'''
+       	
 		self.axes = axes
 		
 		self.P_GAIN = P_GAIN
@@ -182,8 +281,44 @@ class PIDController():
 	
 		
 	def Update(self, current_state, target_state):
+		'''
+		Fixes error between current_state and target_state
+	
+        	Parameters
+        	----------
+        	current_state: float[]
+			the current state of the system being controlled
+			
+		target_state: float[]
+			the target state of the system being controlled
+			
+        	Returns
+       	-------
+       	float[]
+       		the vector that will adjust current_state to fix the error
+       	
+       	Raises
+       	------
+       	ValueError
+       		if target_state and current_state don't have a number of elements
+       		equal to the number of axes
+       		
+       	Warnings
+       	--------
+       	both curren_state and target_state must have a number of element equal
+       	to the number of axes in this pid controller.
+       	
+       	Notes
+       	-----
+       	I am using an object to allow data to persist throughout mutiple iterations
+       	of the main loop.
+       	'''
+	
 		if(not len(current_state) == self.axes): 
-			raise ValueError('PID Update Failed: not enough axes')
+			raise ValueError('PID Update Failed: current state does not have enough axes')
+		
+		if(not len(target_state) == self.axes): 
+			raise ValueError('PID Update Failed: target state does not have enough axes')
 		
 		# calculate current error
 		e = [target_state[i] - current_state[i] for i in range(self.axes)]
@@ -221,6 +356,19 @@ laser_initialized = False
 samples = 0
 
 def OnLaserStart(data):
+	'''
+	Initializes values for using the laser data only called once.
+ 
+
+        Parameters
+        ----------
+        data: LaserScan
+        	The reading from the drone's laser sensor
+		
+        Returns
+        -------
+        None
+        '''
 	global laser_initialized
 	global unit_vectors
 	global samples
@@ -237,6 +385,20 @@ laser_data = LaserScan()
 
 
 def handle_laser(data):
+	'''
+	Stores the data from the drone's laser sensor.
+	Initializes values for using the laser data.
+ 
+
+        Parameters
+        ----------
+        data: LaserScan
+        	The reading from the drone's laser sensor
+		
+        Returns
+        -------
+        None
+        '''
 	global laser_data
 	if laser_initialized == False: OnLaserStart(data)
 	
@@ -247,6 +409,30 @@ def handle_laser(data):
 laser_sub = rospy.Subscriber('laser', LaserScan, handle_laser)
 
 def AvoidObstacles(target_vector):
+	'''
+	Stears the drone away from obstacles.
+	
+	Using data from the laser sensor, this will choose a 
+	direction to move in that is both un-obstructed and close to 
+	the target vector. 
+ 
+
+        Parameters
+        ----------
+        target_vector: float[]
+        	The ideal direction to be going in
+		
+        Returns
+        -------
+        float[]
+        	The direction the drone should go in to avoid obstacles
+        	
+        Warnings
+        --------
+        Beacuse the laser scans are in a horizontal plane, this will only 
+        avoid obstacles lateraly. The z component of the target vector is 
+        used as the z component of the output direction.
+        '''
 	global unit_vectors
 	
 	if(len(laser_data.ranges) < samples): return target_vector
@@ -287,7 +473,10 @@ def AvoidObstacles(target_vector):
 			if(difference < closest_path_difference):
 				closest_path_unit_vector = unit_vectors[path]
 				closest_path_difference = difference
-				
+	
+	
+	# find the closest obstacle
+	#    speed is determend by nearness to obstacles		
 	closest_obstacle_unit_vector = None
 	
 	closest_obstacle_difference = float('inf')
@@ -303,20 +492,22 @@ def AvoidObstacles(target_vector):
 		else:
 			difference = math.acos(max(min(unit_vectors[obstacle][0]*target_direction[0] + unit_vectors[obstacle][1]*target_direction[1], 1), -1))
 			
-			if(difference < closest_obstacle_difference):
+			if(difference + 1.3 < closest_obstacle_difference) or (difference < closest_obstacle_difference and obstacle > obstacle_index):
 				closest_obstacle_difference = unit_vectors[obstacle]
 				closest_obstacle_difference = difference
 				obstacle_index = obstacle
-	
+			
 	try:
 		x= laser_data.ranges[obstacle_index]
 		
 	except IndexError:
 		print(f'{obstacle_index} is not in range {len(laser_data.ranges)}')
+		
+	
 	if(not laser_data.ranges[obstacle_index] == float('inf')):
 		length = 10 / laser_data.ranges[obstacle_index]
 	
-	# store the new direction
+	# calculate the target direction
 	out = []	
 	if(closest_path_unit_vector == None): 
 		 out = target_direction 
@@ -332,6 +523,45 @@ def AvoidObstacles(target_vector):
 #--------------------------------------------------------------------------------------------------------------------#
 
 def CalculateBoidVector(current_state, target_state, attraction_gain=5, seperation_gain=6, cohesion_gain=1):
+	'''
+	Calculates a movement direction according to the boids algorithm
+	
+		1) move towards end point (attraction)
+		2) stay close to the other drones (cohesion)
+		3) don't get too close to the other drones (seperation)
+ 
+
+        Parameters
+        ----------
+        current_state: float[]
+        	the current postion of the drone
+        
+        target_vector: float[]
+        	The target position of the drone
+		
+	Key Word Args
+		-------------
+		attraction_gain: float
+			how much the drone should favor the attraction vector
+			
+		seperation_gain: float
+			how much the drone should favor the seperation vector
+			
+		cohesion_gain: float
+			how much the drone should favor the cohesion vector
+		
+        Returns
+        -------
+        float[]
+        	The direction the drone should go in according to the boids algorithm
+        	
+        Warnings
+        --------
+        This will not account for obstacles. You should take the output of this and
+        use it as the input for AvoidObstacles().
+        
+        This is not garenteed to avoid collisions with other drones.
+        '''
 	current_position = [current_state.pose.position.x, 
 			    current_state.pose.position.y, 
 			    current_state.pose.position.z]
@@ -442,8 +672,6 @@ def main():
 			
 			scale = min(traversing_PID.Update([0], [distance])[0], 10)
 			
-			#print(direction)
-			#print(scale)
 			accel = [i * scale for i in direction]
 			 
 			PublishAcceleration(accel, current_state)
@@ -471,14 +699,13 @@ def main():
 			next_free_node = 0
 			for i, node in enumerate(path):
 				if(is_point_clear_srv(IsPointClearRequest(node)).is_point_clear):
-					
 					break
+					
 				print(f'node {next_free_node} is not clear')
-				
-			
-			next_free_node = i
+				next_free_node += 1
 			
 			if next_free_node != 0:
+				print(f'next free node: {next_free_node}')
 				path_segment = find_path_srv(FindPathRequest(current_position, path[next_free_node]))
 				path_segment = [[point.x, point.y, point.z] for point in path_segment.path]
 				print(path_segment)
@@ -523,6 +750,31 @@ if 'target_pos' in arguments:
 #--------------------------------------------------------------------------------------------------------------------#
 
 def handle_command(req):
+	'''
+	Hadle the commands service request.
+	
+	Parses the command and preforms an action based 
+	on the issued command. 
+
+        Parameters
+        ----------
+        req: Command
+		the command given to the drone
+		
+        Returns
+        -------
+        CommandResponse
+        	The values returned by the command. 
+        	A boolean indicating if the command was successful.
+        
+        Raises
+        ------
+        ValueError
+        	If the command is not specified.
+        	If the command is not found.
+        	If the command has bad arguments.
+        '''
+
 	global path
 	command = req.command.split()
 	try:
